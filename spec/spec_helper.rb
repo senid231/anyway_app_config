@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "anyway_app_config"
+require 'anyway_app_config'
 
 RSpec.configure do |config|
-  config.example_status_persistence_file_path = ".rspec_status"
+  config.example_status_persistence_file_path = '.rspec_status'
   config.disable_monkey_patching!
 
   config.expect_with :rspec do |c|

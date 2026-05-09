@@ -1,43 +1,199 @@
 # AnywayAppConfig
 
-TODO: Delete this and the text below, and describe your gem
+Schema-driven application config built on top of [`anyway_config`][anyway_config].
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/anyway_app_config`. To experiment with that code, run `bin/console` for an interactive prompt.
+`anyway_config` does the heavy lifting of loading values from YAML and ENV.
+`anyway_app_config` adds a small DSL on top for describing app config with
+typed attributes, defaults, required fields, and **nested objects** (single
+or array). Configs can be used as plain instances or as a singleton.
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
+Add to your Gemfile:
 
-Install the gem and add to the application's Gemfile by executing:
-
-```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+```ruby
+gem "anyway_app_config"
 ```
 
-If bundler is not being used to manage dependencies, install the gem by executing:
+Then run `bundle install`.
 
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+## Defining a config
+
+Inherit from `AnywayAppConfig::Config` and describe attributes with the
+`attribute` DSL:
+
+```ruby
+require "anyway_app_config"
+
+class AppConfig < AnywayAppConfig::Config
+  config_name "app_config"
+  env_prefix  "APP"
+
+  attribute :deploy_env, type: :string, required: true
+  attribute :version,    type: :string, default: "unknown"
+  attribute :commit_sha, type: :string, default: "000000"
+
+  attribute :sentry, required: true do
+    attribute :dsn,         type: :string, default: ""
+    attribute :environment, type: :string, required: true
+    attribute :server_name, type: :string, required: true
+    attribute :tags,        type: :hash,   default: {}
+  end
+
+  attribute :prometheus, required: true do
+    attribute :enabled,        type: :boolean, default: false
+    attribute :host,           type: :string,  default: "localhost"
+    attribute :port,           type: :integer, default: 9394
+    attribute :default_labels, type: :hash,    default: {}
+  end
+end
 ```
 
-## Usage
+`attribute` accepts:
 
-TODO: Write usage instructions here
+| option     | meaning                                                      |
+| ---------- | ------------------------------------------------------------ |
+| `type:`    | type id from `anyway_config`'s registry (`:string`, `:integer`, `:float`, `:boolean`, `:date`, `:datetime`, `:uri`, `:hash`, …), or any object responding to `#call(value)` |
+| `array:`   | when `true`, value is an array of `type` (or nested objects) |
+| `default:` | default value (defaults to `nil`, or `[]` when `array: true`) |
+| `required:`| validate that the attribute is present and not empty         |
+| block      | defines a nested config object (see below)                   |
+
+### Nested attributes
+
+Pass a block to define a nested config. The DSL builds a child config class
+that inherits from `AnywayAppConfig::Config`, exposes the same DSL, and is
+exposed as a constant (e.g. `AppConfig::SentryCfg`).
+
+Combine with `array: true` to get a list of nested objects:
+
+```ruby
+class AppConfig < AnywayAppConfig::Config
+  config_name "app_config"
+
+  attribute :servers, array: true do
+    attribute :host, type: :string, required: true
+    attribute :port, type: :integer, default: 80
+  end
+end
+```
+
+### The `:hash` type
+
+`AnywayAppConfig::Config` registers a `:hash` type on a per-class type
+registry. It accepts any `Hash` value as-is and raises `ArgumentError` for
+non-hash values. Anyway's global `TypeRegistry.default` is **not** mutated.
+
+## Loading config
+
+```ruby
+config = AppConfig.load!  # frozen instance, with all sources merged
+config.sentry.environment
+config.servers.first.host
+```
+
+`load!` returns a frozen instance every call (no caching). Sources are loaded
+through `anyway_config` (YAML + ENV by default).
+
+### Singleton mode
+
+Include `AnywayAppConfig::Singleton` to get a class-level singleton with
+class-level access to all instance methods:
+
+```ruby
+class AppConfig < AnywayAppConfig::Config
+  include AnywayAppConfig::Singleton
+  # ...
+end
+
+AppConfig.load!                # frozen instance, cached on the class
+AppConfig.deploy_env           # delegates to instance
+AppConfig.sentry.environment   # delegates to instance
+AppConfig.instance             # the cached instance
+AppConfig.loaded?              # true / false
+
+AppConfig.load!                # raises AnywayAppConfig::AlreadyLoadedError
+AppConfig.foo                  # raises AnywayAppConfig::NotLoadedError if not loaded
+```
+
+The singleton is intentionally strict — there is no `reload!`. To re-read
+config, restart the process.
+
+> Note: class-level delegation goes through `method_missing`, so attribute
+> names that clash with existing `Class` methods (`name`, `class`, `send`, …)
+> are not delegated — pick non-clashing names.
+
+### YAML and ENV
+
+Loading is provided by `anyway_config`. A typical `config/app_config.yml`:
+
+```yaml
+development: &dev
+  deploy_env: "development"
+
+  sentry:
+    dsn: ""
+    environment: "development"
+    server_name: "denis-t.localhost"
+    tags:
+      custom: "tag"
+
+  prometheus:
+    enabled: false
+    host: "localhost"
+    port: 9394
+
+test:
+  <<: *dev
+  deploy_env: "test"
+
+production:
+  <<: *dev
+```
+
+ENV vars use the prefix declared via `env_prefix`, e.g. `APP_DEPLOY_ENV`,
+`APP_SENTRY__ENVIRONMENT`. See the [anyway_config docs][anyway_config] for
+the full source list and naming rules.
+
+## Rails
+
+Calling `AppConfig.load!` yourself in `config/application.rb` works fine:
+
+```ruby
+class Application < Rails::Application
+  config.before_initialize do
+    AppConfig.load!
+  end
+end
+```
+
+For an opt-in helper, register classes on the Railtie config and they will be
+loaded just before initializers run:
+
+```ruby
+class Application < Rails::Application
+  config.anyway_app_config.classes = [AppConfig]
+end
+```
+
+The Railtie auto-loads when Rails is on the load path; if not, require it
+explicitly with `require "anyway_app_config/railtie"`.
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
+```
+bundle install
+bundle exec rspec
+bundle exec rubocop
+```
 
 ## Contributing
 
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/anyway_app_config. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/anyway_app_config/blob/master/CODE_OF_CONDUCT.md).
+Bug reports and pull requests are welcome on GitHub at
+<https://github.com/senid231/anyway_app_config>.
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
+MIT. See [LICENSE.txt](LICENSE.txt).
 
-## Code of Conduct
-
-Everyone interacting in the AnywayAppConfig project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/anyway_app_config/blob/master/CODE_OF_CONDUCT.md).
+[anyway_config]: https://github.com/palkan/anyway_config
