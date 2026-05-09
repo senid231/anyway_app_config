@@ -246,6 +246,7 @@ require "anyway_app_config"
 class Credentials < AnywayAppConfig::Config
   config_name "credentials"
   env_prefix  ""   # no prefix — read raw ENV like SECRET_KEY_BASE, DATABASE_PASSWORD
+  self.configuration_sources = [:yml, :env]   # see note below
 
   attribute :secret_key_base,       type: :string, required: true
   attribute :database_password,     type: :string, required: true
@@ -253,6 +254,15 @@ class Credentials < AnywayAppConfig::Config
   attribute :aws_secret_access_key, type: :string, default: ""
 end
 ```
+
+> **Pin `configuration_sources` explicitly.** Under Rails, `anyway_config`
+> registers a `:credentials` loader that reads from
+> `Rails.application.credentials` — exactly the thing you're trying to
+> replace. If you don't override `configuration_sources`, your shiny new
+> `Credentials` class will silently merge values back in from the encrypted
+> credentials file (or fail to boot if `RAILS_MASTER_KEY` is missing).
+> Setting `self.configuration_sources = [:yml, :env]` keeps loading limited
+> to YAML + ENV and removes the dependency on the Rails credentials loader.
 
 An empty `env_prefix` matches ENV var names directly against attribute names
 (uppercased), so `SECRET_KEY_BASE` populates `:secret_key_base`. Useful for
@@ -280,23 +290,29 @@ production:
   database_password: ""
 ```
 
-**3. Wire it in `config/application.rb` before configuration:**
+**3. Wire it in `config/application.rb`:**
 
 ```ruby
 require_relative "credentials"
 
 module MyApp
   class Application < Rails::Application
-    config.before_configuration do
-      self.credentials = Credentials.load!
-      # Rails 7.2+ generates a dynamic secret_key_base in dev/test when one
-      # is not set. Pin it from credentials so it stays stable across boots.
-      # See Rails::Application::Configuration#generate_local_secret?
-      config.secret_key_base = credentials.secret_key_base
-    end
+    config.load_defaults 8.1
+
+    Rails.application.credentials = Credentials.load!
+    # Rails 7.2+ generates a dynamic secret_key_base in dev/test when one
+    # is not set. Pin it from credentials so it stays stable across boots.
+    # See Rails::Application::Configuration#generate_local_secret?
+    config.secret_key_base = Rails.application.credentials.secret_key_base
   end
 end
 ```
+
+Assigning directly inside the class body works because `Rails.application` is
+already available by the time `config/application.rb` is evaluated. If you
+need the assignment deferred (e.g. credentials depend on something set up by
+an initializer or another `before_configuration` hook), wrap it in
+`config.before_configuration { ... }` instead.
 
 **4. Use it like the standard credentials object:**
 
