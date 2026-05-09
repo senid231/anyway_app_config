@@ -11,3 +11,9 @@
 .rspec_status
 
 /Gemfile.lock
+
+# ai tools
+/.claude
+/.pi
+CLAUDE.md
+AGENTS.md
