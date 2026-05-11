@@ -339,18 +339,16 @@ For small Rails apps where dedicated `config/app_config.rb` and
 ```ruby
 module MyApp
   class Application < Rails::Application
-    config.before_configuration do
-      self.credentials = AnywayAppConfig.build(load: true) do
-        config_name "credentials"
-        env_prefix  ""   # no prefix — read raw ENV like SECRET_KEY_BASE
+    Rails.application.credentials = AnywayAppConfig.build(load: true) do
+      config_name "credentials"
+      env_prefix  ""   # no prefix — read raw ENV like SECRET_KEY_BASE
 
-        attribute :secret_key_base,       type: :string, required: true
-        attribute :database_password,     type: :string, required: true
-        attribute :aws_access_key_id,     type: :string, default: ""
-        attribute :aws_secret_access_key, type: :string, default: ""
-      end
-      config.secret_key_base = credentials.secret_key_base
+      attribute :secret_key_base,       type: :string, required: true
+      attribute :database_password,     type: :string, required: true
+      attribute :aws_access_key_id,     type: :string, default: ""
+      attribute :aws_secret_access_key, type: :string, default: ""
     end
+    config.secret_key_base = Rails.application.credentials.secret_key_base
 
     config.app_config = AnywayAppConfig.build(load: true) do
       config_name "app_config"
