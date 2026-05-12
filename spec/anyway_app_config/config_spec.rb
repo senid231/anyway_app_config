@@ -247,6 +247,107 @@ RSpec.describe AnywayAppConfig::Config do
     end
   end
 
+  describe 'explicit config_path' do
+    let(:fixture_path) { File.expand_path('../fixtures/explicit_path.yml', __dir__) }
+    let(:alt_fixture_path) { File.expand_path('../fixtures/explicit_path_alt.yml', __dir__) }
+    let(:config_class) do
+      Class.new(described_class) do
+        config_name 'explicit_path'
+        self.configuration_sources = [:yml]
+        attribute :greeting, type: :string
+      end
+    end
+
+    it 'loads YAML from a per-instance config_path: kwarg' do
+      cfg = config_class.new(config_path: fixture_path)
+      expect(cfg.greeting).to eq('from-explicit-yaml')
+    end
+
+    it 'accepts a Pathname for config_path:' do
+      cfg = config_class.new(config_path: Pathname.new(fixture_path))
+      expect(cfg.greeting).to eq('from-explicit-yaml')
+    end
+
+    it 'overrides any class-level explicit_config_path when both are set' do
+      config_class.explicit_config_path = fixture_path
+      cfg = config_class.new(config_path: alt_fixture_path)
+      expect(cfg.greeting).to eq('from-alt-yaml')
+    end
+
+    context 'with class-level explicit_config_path as a String' do
+      it 'uses it when no per-instance override is passed' do
+        config_class.explicit_config_path = fixture_path
+        expect(config_class.new.greeting).to eq('from-explicit-yaml')
+      end
+    end
+
+    context 'with class-level explicit_config_path as a Pathname' do
+      it 'stringifies and uses it' do
+        config_class.explicit_config_path = Pathname.new(fixture_path)
+        expect(config_class.new.greeting).to eq('from-explicit-yaml')
+      end
+    end
+
+    context 'with class-level explicit_config_path as a Proc' do
+      it 'calls it lazily and uses the returned path' do
+        target = fixture_path
+        called = 0
+        config_class.explicit_config_path = -> {
+          called += 1
+          target
+        }
+
+        cfg1 = config_class.new
+        cfg2 = config_class.new
+
+        expect(cfg1.greeting).to eq('from-explicit-yaml')
+        expect(cfg2.greeting).to eq('from-explicit-yaml')
+        expect(called).to eq(2) # called per-instance, not once
+      end
+
+      it 'uses the Proc result not the Proc itself' do
+        config_class.explicit_config_path = -> { fixture_path }
+        expect(config_class.new.greeting).to eq('from-explicit-yaml')
+      end
+    end
+
+    it 'falls back to the default lookup when explicit_config_path is nil' do
+      config_class.explicit_config_path = nil
+      expect { config_class.new.greeting }.not_to raise_error
+      # default path (./config/explicit_path.yml) doesn't exist, so greeting stays nil
+      expect(config_class.new.greeting).to be_nil
+    end
+
+    it 'is inherited by subclasses' do
+      config_class.explicit_config_path = fixture_path
+      sub = Class.new(config_class)
+      expect(sub.explicit_config_path).to eq(fixture_path)
+      expect(sub.new.greeting).to eq('from-explicit-yaml')
+    end
+
+    it 'works through .load!' do
+      cfg = config_class.load!(config_path: fixture_path)
+      expect(cfg.greeting).to eq('from-explicit-yaml')
+      expect(cfg).not_to be_frozen
+    end
+
+    it 'still accepts attribute kwargs alongside config_path:' do
+      cfg = config_class.new(greeting: 'override', config_path: fixture_path)
+      # explicit overrides win over YAML
+      expect(cfg.greeting).to eq('override')
+    end
+
+    it 'still accepts a positional overrides hash' do
+      cfg = config_class.new({ greeting: 'positional' })
+      expect(cfg.greeting).to eq('positional')
+    end
+
+    it 'raises on unknown keyword args when overrides is also positional' do
+      expect { config_class.new({ greeting: 'a' }, bogus: 1) }
+        .to raise_error(ArgumentError, /unknown keywords: bogus/)
+    end
+  end
+
   describe 'type registry isolation' do
     it "registers :hash on the class registry, not anyway's default" do
       expect { Anyway::TypeRegistry.default.deserialize({}, :hash) }

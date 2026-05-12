@@ -40,6 +40,20 @@ RSpec.describe AnywayAppConfig::Singleton do
       allow(config_class.instance).to receive(:title).and_return('stubbed')
       expect(config_class.title).to eq('stubbed')
     end
+
+    it 'forwards config_path: to the instance' do
+      fixture_path = File.expand_path('../fixtures/explicit_path.yml', __dir__)
+      klass = Class.new(AnywayAppConfig::Config) do
+        include AnywayAppConfig::Singleton
+
+        config_name 'explicit_path'
+        self.configuration_sources = [:yml]
+        attribute :greeting, type: :string
+      end
+
+      klass.load!(config_path: fixture_path)
+      expect(klass.greeting).to eq('from-explicit-yaml')
+    end
   end
 
   describe '.instance' do

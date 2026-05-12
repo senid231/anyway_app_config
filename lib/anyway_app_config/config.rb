@@ -11,6 +11,7 @@ module AnywayAppConfig
   class Config < ::Anyway::Config
     class_attribute :nested_config_class, instance_accessor: false
     class_attribute :skip_freeze_classes, instance_accessor: false, default: [].freeze
+    class_attribute :explicit_config_path, instance_accessor: false
 
     class << self
       def attribute(name, type: nil, array: false, default: nil, required: false, &block)
@@ -85,6 +86,18 @@ module AnywayAppConfig
       end
     end
 
+    def initialize(overrides = nil, config_path: nil, **kwargs)
+      @explicit_config_path = calc_explicit_config_path(config_path)
+
+      if overrides.nil? && !kwargs.empty?
+        overrides = kwargs
+      elsif !kwargs.empty?
+        raise ArgumentError, "unknown keywords: #{kwargs.keys.join(', ')}"
+      end
+
+      super(overrides)
+    end
+
     def deep_freeze_values!
       deep_freeze_value(values)
       self
@@ -97,7 +110,21 @@ module AnywayAppConfig
       super
     end
 
+    def resolve_config_path(name, env_prefix)
+      @explicit_config_path || super
+    end
+
     private
+
+    def calc_explicit_config_path(config_path)
+      return config_path.to_s unless config_path.nil?
+
+      class_default = self.class.explicit_config_path
+      return if class_default.nil?
+
+      class_default = class_default.call if class_default.is_a?(Proc)
+      class_default&.to_s
+    end
 
     def deep_freeze_value(val)
       return val if skip_freeze?(val)

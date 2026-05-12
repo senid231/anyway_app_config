@@ -117,6 +117,43 @@ class AppConfig < AnywayAppConfig::Config
 end
 ```
 
+### Explicit config path
+
+By default, `anyway_config` looks for `config/<config_name>.yml` (or whatever
+`Anyway::Settings.default_config_path` resolves to). To point at a specific
+YAML file, pass `config_path:` to `new`/`load!`:
+
+```ruby
+AppConfig.load!(config_path: "/etc/myapp/app_config.yml")
+```
+
+`config_path:` also forwards through `Singleton#load!`.
+
+For a per-class default, set `explicit_config_path` on the class (inherited
+by subclasses, overridden by a per-call `config_path:`). It accepts a `String`
+or `Pathname` directly:
+
+```ruby
+class AppConfig < AnywayAppConfig::Config
+  self.explicit_config_path = Rails.root.join('config', 'app_config.yml')
+  # ...
+end
+```
+
+Or a `Proc` for cases where the path depends on runtime state (called every
+time a new instance is built):
+
+```ruby
+class AppConfig < AnywayAppConfig::Config
+  self.explicit_config_path = -> { "/etc/myapp/#{ENV.fetch('APP_ENV')}.yml" }
+  # ...
+end
+```
+
+Anyway's other built-in mechanisms (`<CONFIG_NAME>_CONF` env var,
+`Anyway::Settings.default_config_path` lambda) still work — `config_path:` and
+`explicit_config_path` just give you a class-scoped, code-driven option.
+
 ### Singleton mode
 
 Include `AnywayAppConfig::Singleton` to get a class-level singleton with
