@@ -10,6 +10,7 @@ module AnywayAppConfig
 
   class Config < ::Anyway::Config
     class_attribute :nested_config_class, instance_accessor: false
+    class_attribute :skip_freeze_classes, instance_accessor: false, default: [].freeze
 
     class << self
       def attribute(name, type: nil, array: false, default: nil, required: false, &block)
@@ -50,7 +51,7 @@ module AnywayAppConfig
       end
 
       def load!(*, **)
-        new(*, **).tap(&:deep_freeze!)
+        new(*, **).tap(&:deep_freeze_values!)
       end
 
       def type_registry
@@ -84,12 +85,12 @@ module AnywayAppConfig
       end
     end
 
-    def deep_freeze!
-      return self if frozen?
-
+    def deep_freeze_values!
       deep_freeze_value(values)
-      freeze
+      self
     end
+
+    alias deep_freeze! deep_freeze_values!
 
     def load(overrides = nil)
       overrides = overrides.deep_stringify_keys if overrides.is_a?(::Hash)
@@ -99,9 +100,11 @@ module AnywayAppConfig
     private
 
     def deep_freeze_value(val)
+      return val if skip_freeze?(val)
+
       case val
       when AnywayAppConfig::Config
-        val.deep_freeze!
+        val.deep_freeze_values!
       when Array
         val.each { |item| deep_freeze_value(item) }
         val.freeze
@@ -112,6 +115,10 @@ module AnywayAppConfig
         val.freeze if val.respond_to?(:freeze) && !val.frozen?
       end
       val
+    end
+
+    def skip_freeze?(val)
+      self.class.skip_freeze_classes.any? { |klass| val.is_a?(klass) }
     end
   end
 

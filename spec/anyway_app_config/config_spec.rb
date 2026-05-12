@@ -111,7 +111,7 @@ RSpec.describe AnywayAppConfig::Config do
     end
   end
 
-  describe 'deep_freeze!' do
+  describe 'deep_freeze_values!' do
     let(:config_class) do
       Class.new(described_class) do
         config_name 'test_deep_freeze'
@@ -131,22 +131,34 @@ RSpec.describe AnywayAppConfig::Config do
       end
     end
 
-    it 'freezes the instance and nested values' do
+    it 'freezes contained values but leaves Config instances unfrozen' do
       cfg = config_class.new(
         tags: %w[a b],
         extras: { 'k' => 'v' },
         sentry: { dsn: 'd' },
         servers: [{ host: 'h' }]
       )
-      cfg.deep_freeze!
+      cfg.deep_freeze_values!
 
-      expect(cfg).to be_frozen
+      expect(cfg).not_to be_frozen
+      expect(cfg.sentry).not_to be_frozen
+      expect(cfg.servers.first).not_to be_frozen
+
       expect(cfg.tags).to be_frozen
       expect(cfg.tags.first).to be_frozen
       expect(cfg.extras).to be_frozen
-      expect(cfg.sentry).to be_frozen
       expect(cfg.servers).to be_frozen
-      expect(cfg.servers.first).to be_frozen
+    end
+
+    it 'leaves Config instances stubbable via RSpec' do
+      cfg = config_class.new(sentry: { dsn: 'd' }, servers: [{ host: 'h' }])
+      cfg.deep_freeze_values!
+
+      allow(cfg.sentry).to receive(:dsn).and_return('stubbed')
+      allow(cfg.servers.first).to receive(:host).and_return('stubbed-host')
+
+      expect(cfg.sentry.dsn).to eq('stubbed')
+      expect(cfg.servers.first.host).to eq('stubbed-host')
     end
   end
 
@@ -157,12 +169,14 @@ RSpec.describe AnywayAppConfig::Config do
         self.configuration_sources = []
 
         attribute :name, type: :string, default: 'x'
+        attribute :tags, type: :string, array: true, default: %w[a]
       end
     end
 
-    it 'returns a frozen instance' do
+    it 'returns an instance with frozen values but unfrozen instance' do
       cfg = config_class.load!
-      expect(cfg).to be_frozen
+      expect(cfg).not_to be_frozen
+      expect(cfg.tags).to be_frozen
       expect(cfg.name).to eq('x')
     end
 
@@ -170,6 +184,66 @@ RSpec.describe AnywayAppConfig::Config do
       a = config_class.load!
       b = config_class.load!
       expect(a).not_to equal(b)
+    end
+  end
+
+  describe 'skip_freeze_classes' do
+    let(:skippable_class) { Class.new }
+    let(:config_class) do
+      sk = skippable_class
+      Class.new(described_class) do
+        config_name 'test_skip_freeze'
+        self.configuration_sources = []
+        self.skip_freeze_classes = [sk]
+
+        attribute :extras, type: :hash, default: {}
+        attribute :tags, type: :string, array: true
+      end
+    end
+
+    it 'defaults to an empty array on the base class' do
+      expect(described_class.skip_freeze_classes).to eq([])
+    end
+
+    it 'is inherited by subclasses' do
+      sub = Class.new(config_class)
+      expect(sub.skip_freeze_classes).to eq([skippable_class])
+    end
+
+    it 'leaves instances of listed classes unfrozen during deep-freeze' do
+      widget = skippable_class.new
+      cfg = config_class.new(extras: { 'w' => widget })
+      cfg.deep_freeze_values!
+
+      expect(widget).not_to be_frozen
+      expect(cfg.extras).to be_frozen
+    end
+
+    it 'still freezes other values in the same container' do
+      widget = skippable_class.new
+      cfg = config_class.new(extras: { 'w' => widget, 's' => +'mutable' })
+      cfg.deep_freeze_values!
+
+      expect(cfg.extras['s']).to be_frozen
+      expect(cfg.extras['w']).not_to be_frozen
+    end
+
+    it 'matches subclasses of listed classes via is_a?' do
+      subclass = Class.new(skippable_class)
+      widget = subclass.new
+      cfg = config_class.new(extras: { 'w' => widget })
+      cfg.deep_freeze_values!
+
+      expect(widget).not_to be_frozen
+    end
+
+    it 'does not affect base Config when subclass overrides skip_freeze_classes' do
+      Class.new(described_class) do
+        config_name 'overrides_skip_freeze'
+        self.configuration_sources = []
+        self.skip_freeze_classes = [String]
+      end
+      expect(described_class.skip_freeze_classes).to eq([])
     end
   end
 

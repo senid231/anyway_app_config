@@ -14,7 +14,7 @@ module AnywayAppConfig
           raise AlreadyLoadedError, "#{name || self} is already loaded"
         end
 
-        @instance = new(*, **).tap(&:deep_freeze!)
+        @instance = new(*, **).tap(&:deep_freeze_values!)
       end
 
       def loaded?

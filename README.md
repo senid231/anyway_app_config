@@ -87,13 +87,35 @@ non-hash values. Anyway's global `TypeRegistry.default` is **not** mutated.
 ## Loading config
 
 ```ruby
-config = AppConfig.load!  # frozen instance, with all sources merged
+config = AppConfig.load!  # all sources merged, contained values frozen
 config.sentry.environment
 config.servers.first.host
 ```
 
-`load!` returns a frozen instance every call (no caching). Sources are loaded
+`load!` returns a new instance every call (no caching). Sources are loaded
 through `anyway_config` (YAML + ENV by default).
+
+### Freezing
+
+On `load!` (and `deep_freeze_values!`) the config freezes all of its contained
+values — Arrays, Hashes, and scalars — so the loaded data is effectively
+immutable. The `Config` instance itself and any nested `Config` objects are
+**not** frozen, so RSpec stubs keep working:
+
+```ruby
+allow(AppConfig.sentry).to receive(:dsn).and_return("stubbed")
+```
+
+If a specific value class can't be frozen (e.g. it holds mutable state like a
+cache client or logger), add it to `skip_freeze_classes` to exclude it from
+the freeze walk (matched via `is_a?`, inherited by subclasses):
+
+```ruby
+class AppConfig < AnywayAppConfig::Config
+  self.skip_freeze_classes = [Logger, SomeCacheClient]
+  # ...
+end
+```
 
 ### Singleton mode
 
@@ -106,7 +128,7 @@ class AppConfig < AnywayAppConfig::Config
   # ...
 end
 
-AppConfig.load!                # frozen instance, cached on the class
+AppConfig.load!                # values frozen, instance cached on the class
 AppConfig.deploy_env           # delegates to instance
 AppConfig.sentry.environment   # delegates to instance
 AppConfig.instance             # the cached instance
@@ -224,8 +246,8 @@ Rails.configuration.app_config.deploy_env
 Rails.configuration.app_config.sentry.dsn
 ```
 
-`AppConfig.load!` returns a frozen instance, so `Rails.configuration.app_config`
-is safe to read from any thread. If you want class-level access
+`AppConfig.load!` returns an instance with frozen values, so
+`Rails.configuration.app_config` is safe to read from any thread. If you want class-level access
 (`AppConfig.deploy_env`) instead, use [Singleton mode](#singleton-mode) and
 just call `AppConfig.load!` in `config/application.rb` without assigning it
 to `config.app_config`.
@@ -236,7 +258,7 @@ Rails 7.2+ encrypts `config/credentials.yml.enc` by default. If your secrets
 are already injected by your deploy pipeline (Helm, Kubernetes secrets, CI/CD
 vault, ENV) you don't need encryption-at-rest in the repo — and the encrypted
 credentials flow becomes pure overhead. `anyway_app_config` is a drop-in
-replacement: typed, required-checked, frozen, and ENV-overridable.
+replacement: typed, required-checked, value-frozen, and ENV-overridable.
 
 **1. Define the credentials class in `config/credentials.rb`:**
 
@@ -367,8 +389,8 @@ end
 ```
 
 `AnywayAppConfig.build(&block)` returns an anonymous `AnywayAppConfig::Config`
-subclass; `build(load: true, &block)` calls `load!` and returns the frozen
-instance. The block is `class_eval`'d on the new subclass, so `config_name`,
+subclass; `build(load: true, &block)` calls `load!` and returns the loaded
+instance (with frozen values). The block is `class_eval`'d on the new subclass, so `config_name`,
 `env_prefix`, and `attribute` are available exactly as in a named class.
 
 `config_name` is **mandatory** — anonymous classes have no name, so

@@ -18,9 +18,9 @@ RSpec.describe AnywayAppConfig::Singleton do
   end
 
   describe '.load!' do
-    it 'returns a frozen instance' do
+    it 'returns an instance that is not frozen (to remain stubbable)' do
       cfg = config_class.load!
-      expect(cfg).to be_frozen
+      expect(cfg).not_to be_frozen
       expect(cfg.title).to eq('hello')
     end
 
@@ -33,6 +33,12 @@ RSpec.describe AnywayAppConfig::Singleton do
     it 'caches the instance and returns the same object via .instance' do
       cfg = config_class.load!
       expect(config_class.instance).to equal(cfg)
+    end
+
+    it 'allows RSpec to stub methods on the loaded instance' do
+      config_class.load!
+      allow(config_class.instance).to receive(:title).and_return('stubbed')
+      expect(config_class.title).to eq('stubbed')
     end
   end
 

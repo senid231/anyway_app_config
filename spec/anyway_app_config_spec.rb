@@ -25,16 +25,18 @@ RSpec.describe AnywayAppConfig do
       expect(klass.new.name).to eq('x')
     end
 
-    it 'returns a frozen instance when load: true' do
+    it 'returns an instance with frozen values (instance itself remains unfrozen) when load: true' do
       cfg = described_class.build(load: true) do
         config_name 'build_load'
         self.configuration_sources = []
 
         attribute :greeting, type: :string, default: 'hi'
+        attribute :tags, type: :string, array: true, default: %w[a]
       end
 
       expect(cfg).to be_a(AnywayAppConfig::Config)
-      expect(cfg).to be_frozen
+      expect(cfg).not_to be_frozen
+      expect(cfg.tags).to be_frozen
       expect(cfg.greeting).to eq('hi')
     end
 
@@ -48,10 +50,11 @@ RSpec.describe AnywayAppConfig do
         end
       end
 
-      cfg = klass.new(sentry: { dsn: 'https://example' }).tap(&:deep_freeze!)
+      cfg = klass.new(sentry: { dsn: 'https://example' }).tap(&:deep_freeze_values!)
 
       expect(cfg.sentry.dsn).to eq('https://example')
-      expect(cfg).to be_frozen
+      expect(cfg).not_to be_frozen
+      expect(cfg.sentry).not_to be_frozen
     end
 
     it 'raises without a block' do
