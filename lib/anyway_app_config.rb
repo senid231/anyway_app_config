@@ -3,6 +3,11 @@
 require_relative 'anyway_app_config/version'
 require_relative 'anyway_app_config/config'
 require_relative 'anyway_app_config/singleton'
+require_relative 'anyway_app_config/loaders/flat_yaml'
+require_relative 'anyway_app_config/loaders/env_yaml'
+
+Anyway.loaders.append(:flat_yml, AnywayAppConfig::Loaders::FlatYAML)
+Anyway.loaders.append(:env_yml, AnywayAppConfig::Loaders::EnvYAML)
 
 module AnywayAppConfig
   class Error < StandardError; end

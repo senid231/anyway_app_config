@@ -154,6 +154,34 @@ Anyway's other built-in mechanisms (`<CONFIG_NAME>_CONF` env var,
 `Anyway::Settings.default_config_path` lambda) still work — `config_path:` and
 `explicit_config_path` just give you a class-scoped, code-driven option.
 
+### Choosing a YAML loader
+
+By default the `:yml` loader decides whether your YAML is environment-keyed
+(`development:` / `production:` sections) or flat by inspecting the file
+content and global state. To make that explicit, the gem registers two extra
+loaders you can select via `configuration_sources`:
+
+- `:flat_yml` — always reads top-level keys, ignores environment sections.
+- `:env_yml` — always reads the section matching
+  `Anyway::Settings.current_environment`; raises if it is not set.
+
+```ruby
+class Credentials < AnywayAppConfig::Config
+  config_name 'credentials'
+  self.configuration_sources = [:flat_yml, :env]   # flat YAML + ENV overrides
+end
+
+class AppConfig < AnywayAppConfig::Config
+  config_name 'app_config'
+  self.configuration_sources = [:env_yml, :env]    # env-keyed YAML + ENV overrides
+end
+```
+
+Pick one YAML loader per class — `:yml`, `:flat_yml`, and `:env_yml` all read
+the same file, so listing more than one just loads it repeatedly. The default
+`configuration_sources` is untouched, so classes that don't opt in keep using
+`:yml`.
+
 ### Singleton mode
 
 Include `AnywayAppConfig::Singleton` to get a class-level singleton with

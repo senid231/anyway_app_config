@@ -1,0 +1,8 @@
+development:
+  greeting: "from-dev"
+
+test:
+  greeting: "from-test"
+
+production:
+  greeting: "from-prod"

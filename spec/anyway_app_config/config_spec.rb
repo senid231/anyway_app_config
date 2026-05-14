@@ -348,6 +348,72 @@ RSpec.describe AnywayAppConfig::Config do
     end
   end
 
+  describe 'YAML loaders (:flat_yml / :env_yml)' do
+    let(:flat_path) { File.expand_path('../fixtures/explicit_path.yml', __dir__) }
+    let(:env_path) { File.expand_path('../fixtures/env_keyed.yml', __dir__) }
+
+    around do |example|
+      prev = Anyway::Settings.current_environment
+      example.run
+    ensure
+      Anyway::Settings.current_environment = prev
+    end
+
+    it 'registers :flat_yml and :env_yml on Anyway.loaders' do
+      expect(Anyway.loaders.keys).to include(:flat_yml, :env_yml)
+    end
+
+    describe ':flat_yml' do
+      let(:config_class) do
+        Class.new(described_class) do
+          config_name 'flat_loader'
+          self.configuration_sources = [:flat_yml]
+          attribute :greeting, type: :string
+        end
+      end
+
+      it 'reads top-level keys regardless of current_environment' do
+        Anyway::Settings.current_environment = 'production'
+        cfg = config_class.new(config_path: flat_path)
+        expect(cfg.greeting).to eq('from-explicit-yaml')
+      end
+
+      it 'ignores environment sections in an env-keyed file' do
+        Anyway::Settings.current_environment = 'production'
+        cfg = config_class.new(config_path: env_path)
+        expect(cfg.greeting).to be_nil
+      end
+    end
+
+    describe ':env_yml' do
+      let(:config_class) do
+        Class.new(described_class) do
+          config_name 'env_loader'
+          self.configuration_sources = [:env_yml]
+          attribute :greeting, type: :string
+        end
+      end
+
+      it 'reads the section matching current_environment' do
+        Anyway::Settings.current_environment = 'test'
+        cfg = config_class.new(config_path: env_path)
+        expect(cfg.greeting).to eq('from-test')
+      end
+
+      it 'reads a different section when current_environment changes' do
+        Anyway::Settings.current_environment = 'production'
+        cfg = config_class.new(config_path: env_path)
+        expect(cfg.greeting).to eq('from-prod')
+      end
+
+      it 'raises when current_environment is not set' do
+        Anyway::Settings.current_environment = nil
+        expect { config_class.new(config_path: env_path) }
+          .to raise_error(ArgumentError, /current_environment must be set/)
+      end
+    end
+  end
+
   describe 'type registry isolation' do
     it "registers :hash on the class registry, not anyway's default" do
       expect { Anyway::TypeRegistry.default.deserialize({}, :hash) }
