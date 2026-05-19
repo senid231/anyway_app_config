@@ -111,6 +111,45 @@ RSpec.describe AnywayAppConfig::Config do
     end
   end
 
+  describe 'nested config_name' do
+    let(:config_class) do
+      Class.new(described_class) do
+        config_name 'nested_naming'
+        self.configuration_sources = []
+
+        attribute :sentry do
+          attribute :dsn, type: :string, default: ''
+          attribute :transport do
+            attribute :proxy, type: :string, default: ''
+          end
+        end
+
+        attribute :server, array: true do
+          attribute :host, type: :string, default: ''
+          attribute :endpoint do
+            attribute :ca, type: :string, default: ''
+          end
+        end
+      end
+    end
+
+    it 'uses the bare attribute name for a top-level nested config' do
+      expect(config_class::SentryCfg.config_name).to eq('sentry')
+    end
+
+    it 'uses the bare attribute name for a top-level array-nested config' do
+      expect(config_class::ServerCfg.config_name).to eq('server')
+    end
+
+    it 'dots the parent config_name onto a doubly-nested config' do
+      expect(config_class::SentryCfg::TransportCfg.config_name).to eq('sentry.transport')
+    end
+
+    it 'dots the parent config_name onto a doubly-nested config under an array' do
+      expect(config_class::ServerCfg::EndpointCfg.config_name).to eq('server.endpoint')
+    end
+  end
+
   describe 'deep_freeze_values!' do
     let(:config_class) do
       Class.new(described_class) do

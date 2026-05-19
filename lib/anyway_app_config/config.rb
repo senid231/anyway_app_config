@@ -9,7 +9,9 @@ module AnywayAppConfig
   class NotLoadedError < StandardError; end
 
   class Config < ::Anyway::Config
-    class_attribute :nested_config_class, instance_accessor: false
+    BaseNestedCfgClass = Class.new(self)
+
+    class_attribute :nested_config_class, instance_accessor: false, default: BaseNestedCfgClass
     class_attribute :skip_freeze_classes, instance_accessor: false, default: [].freeze
     class_attribute :explicit_config_path, instance_accessor: false
 
@@ -33,19 +35,26 @@ module AnywayAppConfig
       end
 
       def attr_nested(name, array: false, required: false, &block)
-        klass = Class.new(nested_config_class)
-        const_set("#{name.to_s.classify}Cfg", klass)
-        klass.config_name :"#{config_name}_#{name}"
-        klass.configuration_sources = []
-        klass.class_eval(&block) if block
+        nested_klass = Class.new(nested_config_class)
+        const_set("#{name.to_s.classify}Cfg", nested_klass)
+        # nested_klass.config_name represents path to config struct in main config file
+        if self < nested_config_class
+          # nested inside another nested config
+          nested_klass.config_name :"#{config_name}.#{name}"
+        else
+          # nested in main config
+          nested_klass.config_name name.to_sym
+        end
+        nested_klass.configuration_sources = []
+        nested_klass.class_eval(&block) if block
 
         if array
           attr_config(name => [])
-          caster = ->(v) { klass.new(v) }
+          caster = ->(v) { nested_klass.new(v) }
           coerce_types(name => { type: caster, array: true })
         else
           attr_config(name => {})
-          coerce_types(name => { config: klass })
+          coerce_types(name => { config: nested_klass })
         end
 
         self.required(name) if required
@@ -148,6 +157,4 @@ module AnywayAppConfig
       self.class.skip_freeze_classes.any? { |klass| val.is_a?(klass) }
     end
   end
-
-  Config.nested_config_class = Config
 end
