@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name = 'anyway_app_config'
   spec.version = AnywayAppConfig::VERSION
   spec.authors = ['Denis Talakevich']
-  spec.email = ['senid231@gmail.com']
+  spec.email = ['denis.t@didww.com']
 
   spec.summary = 'Schema-driven application config built on top of anyway_config.'
   spec.description = <<~DESC
@@ -15,7 +15,7 @@ Gem::Specification.new do |spec|
     nested objects (single or array). Configs can be used as plain instances
     or as singletons, and load values from YAML and ENV via anyway_config.
   DESC
-  spec.homepage = 'https://github.com/senid231/anyway_app_config'
+  spec.homepage = 'https://github.com/didww/anyway_app_config'
   spec.license = 'MIT'
   spec.required_ruby_version = '>= 3.2.0'
   spec.metadata['homepage_uri'] = spec.homepage

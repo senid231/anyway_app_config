@@ -496,7 +496,7 @@ bundle exec rubocop
 ## Contributing
 
 Bug reports and pull requests are welcome on GitHub at
-<https://github.com/senid231/anyway_app_config>.
+<https://github.com/didww/anyway_app_config>.
 
 ## License
 
